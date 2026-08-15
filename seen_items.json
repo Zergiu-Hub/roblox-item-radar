@@ -1,4 +1,16 @@
 {
+  "100086926160704": {
+    "name": "Home Base",
+    "price": 200
+  },
+  "100685597163519": {
+    "name": "Red Planet",
+    "price": 200
+  },
+  "103126651884029": {
+    "name": "Supernova Face",
+    "price": 30
+  },
   "103634322170642": {
     "price": null
   },
@@ -8,14 +20,42 @@
   "107440734554218": {
     "price": null
   },
+  "107520667004358": {
+    "name": "Noodle Shop",
+    "price": 200
+  },
   "107819297423853": {
     "price": null
+  },
+  "108920301601866": {
+    "name": "Supernova Eyes",
+    "price": 30
   },
   "110170641825512": {
     "price": null
   },
+  "110186870615643": {
+    "name": "Honeycomb Face",
+    "price": 30
+  },
+  "111062821995186": {
+    "name": "Dark Ombr\u00e9 Lip",
+    "price": 30
+  },
+  "112857099110745": {
+    "name": "Honeycomb Lips",
+    "price": 30
+  },
+  "112872125488872": {
+    "name": "Activity Bag",
+    "price": 140
+  },
   "116075102747404": {
     "price": null
+  },
+  "116956243809295": {
+    "name": "Graffiti Wall",
+    "price": 200
   },
   "117866988082268": {
     "price": null
@@ -29,11 +69,43 @@
   "118743275139047": {
     "price": null
   },
+  "119934643965525": {
+    "name": "Starwisp",
+    "price": 0
+  },
+  "120390109534026": {
+    "name": "Sovereign Peacock Cape",
+    "price": 145
+  },
   "121045246363068": {
     "price": null
   },
+  "121199209890990": {
+    "name": "Prism Skies",
+    "price": 0
+  },
+  "122021150352896": {
+    "name": "Honeycomb Sparkles",
+    "price": 30
+  },
+  "123081451937252": {
+    "name": "2099",
+    "price": 200
+  },
+  "123317074418230": {
+    "name": "Concrete Playground",
+    "price": 200
+  },
+  "123722585142559": {
+    "name": "Supernova Sparkles",
+    "price": 30
+  },
   "124129523480899": {
     "price": null
+  },
+  "124727635686515": {
+    "name": "Sand Stupa Cap",
+    "price": 95
   },
   "125804932667704": {
     "price": null
@@ -41,17 +113,45 @@
   "129802248194386": {
     "price": null
   },
+  "130206680836097": {
+    "name": "Tricolor Ladoo Hat",
+    "price": 95
+  },
+  "132272208178794": {
+    "name": "Magic Music Bus",
+    "price": 200
+  },
+  "132378309498462": {
+    "name": "Burnt Bronze Smokey Eyes",
+    "price": 30
+  },
   "134608354623189": {
     "price": null
   },
   "136505693848140": {
     "price": null
   },
+  "139249110472535": {
+    "name": "Ancient Valley",
+    "price": 200
+  },
+  "139579276427743": {
+    "name": "Cloud Nine",
+    "price": 200
+  },
   "139824897976016": {
     "price": null
   },
   "212574078347756": {
     "price": null
+  },
+  "5626295": {
+    "name": "FIFA Football Animation Pack",
+    "price": 300
+  },
+  "76475054135932": {
+    "name": "Supernova Lips",
+    "price": 30
   },
   "78366118551488": {
     "price": null
@@ -62,8 +162,24 @@
   "81167367168790": {
     "price": null
   },
+  "81421947324360": {
+    "name": "Courtside Golden Hour",
+    "price": 200
+  },
+  "81461799066557": {
+    "name": "Honeycomb Eyes",
+    "price": 30
+  },
+  "83371670374297": {
+    "name": "Spiderweb Smokey Eyes",
+    "price": 30
+  },
   "86120491937164": {
     "price": null
+  },
+  "87019331085561": {
+    "name": "Midnight Carnival",
+    "price": 200
   },
   "88843808342589": {
     "price": null
@@ -82,6 +198,10 @@
   },
   "93571187642993": {
     "price": null
+  },
+  "95681420685521": {
+    "name": "Moonlight Meadow",
+    "price": 200
   },
   "98481185145328": {
     "price": null
