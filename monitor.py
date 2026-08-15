@@ -17,7 +17,7 @@ THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/assets"
 
 STATE_FILE = Path("seen_items.json")
 
-PRICE_DROP_THRESHOLD = 15.0
+PRICE_DROP_THRESHOLD = 10.0
 
 HEADERS = {
     "User-Agent": "Roblox-Item-Radar/4.0"
