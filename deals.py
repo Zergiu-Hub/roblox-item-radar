@@ -17,12 +17,11 @@ THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/assets"
 
 STATE_FILE = Path("deals_state.json")
 
-# Alert when lowest resale price drops 10% or more
+# Alert when the observed lowest resale price drops 10%+
 DEAL_THRESHOLD = 10.0
 
-# TEMPORARY TEST MODE
-# Change this to False after the Discord test works!
-TEST_MODE = True
+# REAL MODE
+TEST_MODE = False
 
 HEADERS = {
     "User-Agent": "Roblox-Limited-Deal-Radar/1.1"
@@ -104,7 +103,12 @@ def get_collectibles():
     if response is None:
         return None
 
-    return response.json().get("data", [])
+    try:
+        return response.json().get("data", [])
+
+    except ValueError as error:
+        print(f"⚠️ Invalid Roblox response: {error}")
+        return None
 
 
 def get_lowest_price(item):
@@ -141,7 +145,7 @@ def calculate_drop(old_price, new_price):
 
 
 # =========================================================
-# THUMBNAIL
+# THUMBNAILS
 # =========================================================
 
 def get_thumbnail(item_id):
@@ -170,7 +174,10 @@ def get_thumbnail(item_id):
             return data[0].get("imageUrl")
 
     except requests.RequestException as error:
-        print(f"Thumbnail error: {error}")
+        print(f"⚠️ Thumbnail error: {error}")
+
+    except ValueError as error:
+        print(f"⚠️ Invalid thumbnail response: {error}")
 
     return None
 
@@ -202,15 +209,17 @@ def send_deal_alert(
 
     if test:
         title = "🧪 TEST LIMITED DEAL"
+
         footer = (
-            "TEST ONLY • Limited Deal Radar "
-            "is connected correctly"
+            "TEST ONLY • Limited Deal Radar"
         )
+
     else:
         title = "🔥 LIMITED DEAL DETECTED"
+
         footer = (
-            "Limited Deal Radar • "
-            "10%+ lowest-price drop"
+            f"Limited Deal Radar • "
+            f"{DEAL_THRESHOLD:.0f}%+ price drop"
         )
 
     embed = {
@@ -279,14 +288,14 @@ def send_deal_alert(
         time.sleep(1)
 
         print(
-            f"Discord alert sent: "
+            f"🔥 Discord alert sent: "
             f"{name} ({drop_percent:.1f}%)"
         )
 
         return True
 
     except requests.RequestException as error:
-        print(f"Discord error: {error}")
+        print(f"❌ Discord error: {error}")
         return False
 
 
@@ -296,13 +305,12 @@ def send_deal_alert(
 
 def main():
 
-    # =====================================================
-    # TEMPORARY DISCORD TEST
-    # =====================================================
+    # -----------------------------------------------------
+    # TEST MODE
+    # -----------------------------------------------------
 
     if TEST_MODE:
         print("🧪 TEST MODE ENABLED")
-        print("Sending fake 15% deal alert...")
 
         test_item = {
             "id": 1029025,
@@ -319,27 +327,23 @@ def main():
         )
 
         if success:
-            print(
-                "✅ TEST SUCCESSFUL!"
-            )
-
-            print(
-                "Check your #limited-deals "
-                "Discord channel."
-            )
+            print("✅ TEST SUCCESSFUL!")
 
         else:
-            print(
-                "❌ TEST FAILED."
-            )
+            print("❌ TEST FAILED.")
 
         return
 
-    # =====================================================
-    # REAL DEAL RADAR
-    # =====================================================
+
+    # -----------------------------------------------------
+    # REAL RADAR
+    # -----------------------------------------------------
 
     print("🔥 Limited Deal Radar starting...")
+    print(
+        f"📉 Alert threshold: "
+        f"{DEAL_THRESHOLD:.0f}%"
+    )
 
     state = load_state()
 
@@ -347,22 +351,28 @@ def main():
 
     if items is None:
         print(
-            "⚠️ Roblox could not be checked. "
-            "Will try again next run."
+            "⚠️ Roblox could not be checked."
         )
         return
 
     print(
-        f"Roblox returned "
+        f"📦 Roblox returned "
         f"{len(items)} collectibles."
     )
 
     if not items:
+        print("No collectibles returned.")
         return
 
     first_run = len(state) == 0
 
+    if first_run:
+        print(
+            "📚 First run: learning starting prices."
+        )
+
     alerts_sent = 0
+    prices_found = 0
 
     for item in items:
 
@@ -375,21 +385,41 @@ def main():
 
         lowest_price = get_lowest_price(item)
 
-        # Ignore items with no reseller
+        # Item currently has no reseller price
         if lowest_price is None:
             continue
 
+        prices_found += 1
+
+        name = item.get(
+            "name",
+            "Unknown Limited"
+        )
+
         previous = state.get(item_id)
 
-        # First time seeing this limited
+        # ---------------------------------------------
+        # NEW ITEM FOR OUR RADAR
+        # ---------------------------------------------
+
         if previous is None:
 
+            print(
+                f"➕ Tracking: {name} "
+                f"@ {lowest_price:,} R$"
+            )
+
             state[item_id] = {
-                "name": item.get("name"),
+                "name": name,
                 "lowest_price": lowest_price,
             }
 
             continue
+
+
+        # ---------------------------------------------
+        # EXISTING ITEM
+        # ---------------------------------------------
 
         previous_price = previous.get(
             "lowest_price"
@@ -400,46 +430,82 @@ def main():
             lowest_price
         )
 
-        # REAL DEAL:
-        # lowest price dropped 10% or more
+        print(
+            f"🔎 {name}: "
+            f"{previous_price} -> "
+            f"{lowest_price} "
+            f"({drop_percent:.1f}% drop)"
+        )
+
+
+        # ---------------------------------------------
+        # DEAL FOUND
+        # ---------------------------------------------
+
         if (
             not first_run
             and drop_percent >= DEAL_THRESHOLD
         ):
 
             print(
-                f"🔥 Deal detected: "
-                f"{item.get('name')} | "
-                f"{previous_price} -> "
-                f"{lowest_price} | "
-                f"{drop_percent:.1f}%"
+                f"🔥 DEAL FOUND: "
+                f"{name} | "
+                f"{drop_percent:.1f}% DROP"
             )
 
-            if send_deal_alert(
+            success = send_deal_alert(
                 item,
                 previous_price,
                 lowest_price,
                 drop_percent,
-            ):
+            )
+
+            if success:
                 alerts_sent += 1
 
-        # Remember newest lowest price
+
+        # ---------------------------------------------
+        # UPDATE PRICE HISTORY
+        # ---------------------------------------------
+
         state[item_id] = {
-            "name": item.get("name"),
+            "name": name,
             "lowest_price": lowest_price,
         }
 
+
+    # =====================================================
+    # SAVE
+    # =====================================================
+
     save_state(state)
 
-    print("✅ Deal scan complete.")
+    print("")
+    print("==============================")
+    print("✅ DEAL SCAN COMPLETE")
+    print("==============================")
 
     print(
-        f"📦 Tracking {len(state)} limiteds."
+        f"📦 Collectibles checked: "
+        f"{len(items)}"
     )
 
     print(
-        f"🔥 Deal alerts sent: {alerts_sent}"
+        f"💰 Prices found: "
+        f"{prices_found}"
     )
+
+    print(
+        f"📚 Items being tracked: "
+        f"{len(state)}"
+    )
+
+    print(
+        f"🔥 Alerts sent: "
+        f"{alerts_sent}"
+    )
+
+    print("==============================")
 
 
 if __name__ == "__main__":
