@@ -20,8 +20,12 @@ STATE_FILE = Path("deals_state.json")
 # Alert when lowest resale price drops 10% or more
 DEAL_THRESHOLD = 10.0
 
+# TEMPORARY TEST MODE
+# Change this to False after the Discord test works!
+TEST_MODE = True
+
 HEADERS = {
-    "User-Agent": "Roblox-Limited-Deal-Radar/1.0"
+    "User-Agent": "Roblox-Limited-Deal-Radar/1.1"
 }
 
 
@@ -76,7 +80,6 @@ def roblox_get(url, params=None):
             return None
 
         response.raise_for_status()
-
         return response
 
     except requests.RequestException as error:
@@ -89,13 +92,6 @@ def roblox_get(url, params=None):
 # =========================================================
 
 def get_collectibles():
-    """
-    Get recently updated Roblox Marketplace collectibles.
-
-    Category 2 = Collectibles
-    SortType 3 = Updated
-    """
-
     response = roblox_get(
         CATALOG_URL,
         params={
@@ -119,6 +115,7 @@ def get_lowest_price(item):
 
     try:
         return int(price)
+
     except (TypeError, ValueError):
         return None
 
@@ -187,9 +184,11 @@ def send_deal_alert(
     old_price,
     new_price,
     drop_percent,
+    test=False,
 ):
     item_id = item.get("id")
     name = item.get("name", "Unknown Limited")
+
     creator = item.get(
         "creatorName",
         "Unknown Creator"
@@ -201,8 +200,21 @@ def send_deal_alert(
 
     thumbnail = get_thumbnail(item_id)
 
+    if test:
+        title = "🧪 TEST LIMITED DEAL"
+        footer = (
+            "TEST ONLY • Limited Deal Radar "
+            "is connected correctly"
+        )
+    else:
+        title = "🔥 LIMITED DEAL DETECTED"
+        footer = (
+            "Limited Deal Radar • "
+            "10%+ lowest-price drop"
+        )
+
     embed = {
-        "title": "🔥 LIMITED DEAL DETECTED",
+        "title": title,
         "description": f"## {name}",
         "url": item_url,
 
@@ -240,10 +252,7 @@ def send_deal_alert(
         ],
 
         "footer": {
-            "text": (
-                "Limited Deal Radar • "
-                "10%+ lowest-price drop"
-            )
+            "text": footer
         },
     }
 
@@ -270,7 +279,7 @@ def send_deal_alert(
         time.sleep(1)
 
         print(
-            f"🔥 Deal alert sent: "
+            f"Discord alert sent: "
             f"{name} ({drop_percent:.1f}%)"
         )
 
@@ -286,6 +295,50 @@ def send_deal_alert(
 # =========================================================
 
 def main():
+
+    # =====================================================
+    # TEMPORARY DISCORD TEST
+    # =====================================================
+
+    if TEST_MODE:
+        print("🧪 TEST MODE ENABLED")
+        print("Sending fake 15% deal alert...")
+
+        test_item = {
+            "id": 1029025,
+            "name": "TEST LIMITED ITEM",
+            "creatorName": "Roblox",
+        }
+
+        success = send_deal_alert(
+            test_item,
+            old_price=1000,
+            new_price=850,
+            drop_percent=15.0,
+            test=True,
+        )
+
+        if success:
+            print(
+                "✅ TEST SUCCESSFUL!"
+            )
+
+            print(
+                "Check your #limited-deals "
+                "Discord channel."
+            )
+
+        else:
+            print(
+                "❌ TEST FAILED."
+            )
+
+        return
+
+    # =====================================================
+    # REAL DEAL RADAR
+    # =====================================================
+
     print("🔥 Limited Deal Radar starting...")
 
     state = load_state()
@@ -312,6 +365,7 @@ def main():
     alerts_sent = 0
 
     for item in items:
+
         item_id = item.get("id")
 
         if item_id is None:
@@ -321,7 +375,7 @@ def main():
 
         lowest_price = get_lowest_price(item)
 
-        # No reseller currently available
+        # Ignore items with no reseller
         if lowest_price is None:
             continue
 
@@ -329,6 +383,7 @@ def main():
 
         # First time seeing this limited
         if previous is None:
+
             state[item_id] = {
                 "name": item.get("name"),
                 "lowest_price": lowest_price,
@@ -345,10 +400,13 @@ def main():
             lowest_price
         )
 
+        # REAL DEAL:
+        # lowest price dropped 10% or more
         if (
             not first_run
             and drop_percent >= DEAL_THRESHOLD
         ):
+
             print(
                 f"🔥 Deal detected: "
                 f"{item.get('name')} | "
@@ -365,7 +423,7 @@ def main():
             ):
                 alerts_sent += 1
 
-        # Save latest observed reseller price
+        # Remember newest lowest price
         state[item_id] = {
             "name": item.get("name"),
             "lowest_price": lowest_price,
