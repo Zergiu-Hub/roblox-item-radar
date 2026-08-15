@@ -35,6 +35,11 @@ jobs:
           git config user.name "Roblox Limited Deal Radar"
           git config user.email "actions@users.noreply.github.com"
 
+          if [ ! -f deals_state.json ]; then
+            echo "No deals_state.json created this run."
+            exit 0
+          fi
+
           git add deals_state.json
 
           if git diff --cached --quiet; then
