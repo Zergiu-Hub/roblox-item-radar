@@ -1,8 +1,14 @@
 import json
 import os
+import time
 from pathlib import Path
 
 import requests
+
+
+# =========================================================
+# CONFIG
+# =========================================================
 
 WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
@@ -11,12 +17,16 @@ THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/assets"
 
 STATE_FILE = Path("seen_items.json")
 
-HEADERS = {
-    "User-Agent": "Roblox-Item-Radar/3.0"
-}
-
 PRICE_DROP_THRESHOLD = 15.0
 
+HEADERS = {
+    "User-Agent": "Roblox-Item-Radar/4.0"
+}
+
+
+# =========================================================
+# STATE
+# =========================================================
 
 def load_state():
     if not STATE_FILE.exists():
@@ -27,14 +37,16 @@ def load_state():
             STATE_FILE.read_text(encoding="utf-8")
         )
 
+        # New state format
         if isinstance(data, dict):
             return data
 
-        # Converts the older list format automatically
+        # Automatically convert old list format
         if isinstance(data, list):
             return {
                 str(item_id): {
-                    "price": None
+                    "price": None,
+                    "name": None,
                 }
                 for item_id in data
             }
@@ -56,12 +68,101 @@ def save_state(state):
     )
 
 
-def is_roblox_creator(item):
-    creator = str(
+# =========================================================
+# ROBLOX REQUEST HELPER
+# =========================================================
+
+def roblox_get(url, params=None):
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            headers=HEADERS,
+            timeout=20,
+        )
+
+        # Roblox rate limit
+        if response.status_code == 429:
+            retry_after = response.headers.get(
+                "Retry-After",
+                "unknown"
+            )
+
+            print(
+                "⚠️ Roblox rate limit reached."
+            )
+            print(
+                f"Retry-After: {retry_after}"
+            )
+
+            return None
+
+        response.raise_for_status()
+
+        return response
+
+    except requests.RequestException as error:
+        print(
+            f"⚠️ Roblox request failed: {error}"
+        )
+
+        return None
+
+
+# =========================================================
+# CATALOG
+# =========================================================
+
+def get_catalog_items():
+    """
+    Roblox creator ID 1 = official Roblox account.
+
+    This means Roblox filters the results for us,
+    instead of us downloading lots of UGC first.
+    """
+
+    params = {
+        "Category": 1,
+        "CreatorTargetId": 1,
+        "CreatorType": "User",
+        "SortType": 3,
+        "Limit": 30,
+    }
+
+    response = roblox_get(
+        CATALOG_URL,
+        params=params
+    )
+
+    if response is None:
+        return None
+
+    return response.json().get(
+        "data",
+        []
+    )
+
+
+# =========================================================
+# ITEM CHECKS
+# =========================================================
+
+def is_official_roblox(item):
+    """
+    Extra check even though the API query already
+    requests Roblox creator ID 1.
+    """
+
+    creator_name = str(
         item.get("creatorName", "")
     ).strip().lower()
 
-    return creator == "roblox"
+    creator_id = item.get("creatorTargetId")
+
+    if creator_id == 1:
+        return True
+
+    return creator_name == "roblox"
 
 
 def is_free(item):
@@ -71,78 +172,189 @@ def is_free(item):
 def is_collectible(item):
     return (
         item.get("collectibleItemId") is not None
-        or item.get("lowestPrice") is not None
         or item.get("unitsAvailableForConsumption") is not None
+        or item.get("lowestPrice") is not None
     )
 
 
-def get_thumbnail(item_id):
+def calculate_price_drop(
+    old_price,
+    new_price
+):
+    if old_price is None:
+        return 0.0
+
+    if new_price is None:
+        return 0.0
+
+    if old_price <= 0:
+        return 0.0
+
+    if new_price >= old_price:
+        return 0.0
+
+    return (
+        (old_price - new_price)
+        / old_price
+    ) * 100
+
+
+# =========================================================
+# THUMBNAILS
+# =========================================================
+
+def get_thumbnails(item_ids):
+    """
+    Ask Roblox for multiple thumbnails in ONE request.
+    """
+
+    if not item_ids:
+        return {}
+
     try:
         response = requests.get(
             THUMBNAIL_URL,
             params={
-                "assetIds": item_id,
+                "assetIds": ",".join(
+                    str(x) for x in item_ids
+                ),
                 "size": "420x420",
                 "format": "Png",
                 "isCircular": "false",
             },
-            timeout=15,
+            headers=HEADERS,
+            timeout=20,
         )
+
+        if response.status_code == 429:
+            print(
+                "⚠️ Thumbnail rate limit reached."
+            )
+
+            # Thumbnail is optional.
+            # Continue without images.
+            return {}
 
         response.raise_for_status()
 
-        data = response.json().get("data", [])
+        thumbnails = {}
 
-        if data:
-            return data[0].get("imageUrl")
+        for result in response.json().get(
+            "data",
+            []
+        ):
+            target_id = str(
+                result.get("targetId")
+            )
+
+            image_url = result.get(
+                "imageUrl"
+            )
+
+            if image_url:
+                thumbnails[target_id] = (
+                    image_url
+                )
+
+        return thumbnails
 
     except requests.RequestException as error:
-        print(f"Thumbnail error: {error}")
+        print(
+            f"⚠️ Thumbnail request failed: {error}"
+        )
 
-    return None
+        return {}
 
 
-def send_alert(
+# =========================================================
+# DISCORD
+# =========================================================
+
+def send_discord_embed(embed):
+    try:
+        response = requests.post(
+            WEBHOOK,
+            json={
+                "embeds": [embed]
+            },
+            timeout=20,
+        )
+
+        # Discord can rate limit too
+        if response.status_code == 429:
+            print(
+                "⚠️ Discord rate limit reached."
+            )
+
+            return False
+
+        response.raise_for_status()
+
+        # Tiny delay between Discord alerts
+        time.sleep(1)
+
+        return True
+
+    except requests.RequestException as error:
+        print(
+            f"⚠️ Discord error: {error}"
+        )
+
+        return False
+
+
+def make_standard_embed(
     title,
     item,
     emoji,
-    extra_fields=None
+    thumbnail=None,
+    extra_fields=None,
 ):
-    item_id = item.get("id")
-    name = item.get("name", "Unknown Item")
-    creator = item.get(
-        "creatorName",
-        "Unknown Creator"
+    item_id = str(
+        item.get("id")
+    )
+
+    name = item.get(
+        "name",
+        "Unknown Roblox Item"
     )
 
     price = item.get("price")
 
     if price == 0:
         price_text = "FREE 🆓"
+
     elif price is None:
         price_text = "Not listed"
+
     else:
-        price_text = f"{price:,} Robux"
+        price_text = (
+            f"{price:,} Robux"
+        )
 
     remaining = item.get(
         "unitsAvailableForConsumption"
     )
 
     if remaining is None:
-        quantity_text = "Not provided"
+        remaining_text = (
+            "Not provided"
+        )
+
     else:
-        quantity_text = f"{remaining:,}"
+        remaining_text = (
+            f"{remaining:,}"
+        )
 
     item_url = (
-        f"https://www.roblox.com/catalog/{item_id}"
+        "https://www.roblox.com/"
+        f"catalog/{item_id}"
     )
-
-    thumbnail = get_thumbnail(item_id)
 
     fields = [
         {
             "name": "👤 Creator",
-            "value": str(creator),
+            "value": "Roblox",
             "inline": True,
         },
         {
@@ -152,17 +364,19 @@ def send_alert(
         },
         {
             "name": "📦 Remaining",
-            "value": quantity_text,
+            "value": remaining_text,
             "inline": True,
         },
         {
             "name": "🆔 Item ID",
-            "value": str(item_id),
+            "value": item_id,
             "inline": True,
         },
         {
             "name": "🔗 Roblox",
-            "value": f"[View Item]({item_url})",
+            "value": (
+                f"[View Item]({item_url})"
+            ),
             "inline": True,
         },
     ]
@@ -188,117 +402,55 @@ def send_alert(
             "url": thumbnail
         }
 
-    response = requests.post(
-        WEBHOOK,
-        json={
-            "embeds": [embed]
-        },
-        timeout=20,
-    )
-
-    response.raise_for_status()
-
-    print(f"Discord alert sent: {name}")
+    return embed
 
 
-def send_price_drop_alert(
-    item,
-    old_price,
-    new_price,
-    drop_percent
-):
-    send_alert(
-        "ROBLOX ITEM PRICE DROP",
-        item,
-        "📉",
-        extra_fields=[
-            {
-                "name": "⬅️ Old Price",
-                "value": f"{old_price:,} Robux",
-                "inline": True,
-            },
-            {
-                "name": "➡️ New Price",
-                "value": f"{new_price:,} Robux",
-                "inline": True,
-            },
-            {
-                "name": "📉 Price Drop",
-                "value": f"{drop_percent:.1f}%",
-                "inline": True,
-            },
-        ]
-    )
-
-
-def get_catalog_items():
-    response = requests.get(
-        CATALOG_URL,
-        params={
-            "Category": 1,
-            "SortType": 3,
-            "Limit": 30,
-        },
-        headers=HEADERS,
-        timeout=20,
-    )
-
-    response.raise_for_status()
-
-    return response.json().get(
-        "data",
-        []
-    )
-
-
-def calculate_price_drop(
-    old_price,
-    new_price
-):
-    if old_price is None:
-        return 0
-
-    if new_price is None:
-        return 0
-
-    if old_price <= 0:
-        return 0
-
-    if new_price >= old_price:
-        return 0
-
-    difference = old_price - new_price
-
-    return (
-        difference / old_price
-    ) * 100
-
+# =========================================================
+# MAIN
+# =========================================================
 
 def main():
-    state = load_state()
-
     print(
         "🛰️ Roblox Item Radar starting..."
     )
 
+    state = load_state()
+
     items = get_catalog_items()
+
+    # IMPORTANT:
+    # If Roblox rate-limits the catalog request,
+    # exit safely instead of crashing.
+    if items is None:
+        print(
+            "⚠️ Roblox could not be checked "
+            "this run."
+        )
+
+        print(
+            "GitHub will try again "
+            "on the next scheduled run."
+        )
+
+        return
 
     print(
         f"Marketplace returned "
-        f"{len(items)} items."
+        f"{len(items)} Roblox items."
     )
 
     if not items:
-        print("No items returned.")
+        print(
+            "No Roblox items returned."
+        )
+
         return
 
     first_run = len(state) == 0
 
-    alerts_sent = 0
-    roblox_items_found = 0
+    alerts = []
 
     for item in items:
-
         item_id = item.get("id")
 
         if item_id is None:
@@ -306,105 +458,217 @@ def main():
 
         item_id = str(item_id)
 
-        # Ignore all non-Roblox creators
-        if not is_roblox_creator(item):
+        # Extra safety
+        if not is_official_roblox(item):
+            print(
+                f"Skipping non-Roblox item "
+                f"{item_id}"
+            )
             continue
 
-        roblox_items_found += 1
+        current_price = item.get(
+            "price"
+        )
 
-        current_price = item.get("price")
+        previous = state.get(
+            item_id
+        )
 
-        previous = state.get(item_id)
+        # =================================================
+        # NEW ITEM
+        # =================================================
 
-        # First time we've seen this item
         if previous is None:
 
             state[item_id] = {
-                "price": current_price,
                 "name": item.get("name"),
+                "price": current_price,
             }
 
-            # Don't spam existing items
-            # on the very first setup run.
+            # Don't spam old items when
+            # setting up the radar.
             if first_run:
                 continue
 
             if is_free(item):
-
-                print(
-                    f"🆓 New free Roblox item: "
-                    f"{item.get('name')}"
-                )
-
-                send_alert(
-                    "NEW FREE ROBLOX ITEM",
-                    item,
-                    "🆓",
-                )
-
-                alerts_sent += 1
+                alerts.append({
+                    "type": "free",
+                    "item": item,
+                })
 
             elif is_collectible(item):
-
-                print(
-                    f"💎 New Roblox collectible: "
-                    f"{item.get('name')}"
-                )
-
-                send_alert(
-                    "NEW ROBLOX "
-                    "COLLECTIBLE / LIMITED",
-                    item,
-                    "💎",
-                )
-
-                alerts_sent += 1
+                alerts.append({
+                    "type": "collectible",
+                    "item": item,
+                })
 
             continue
 
-        old_price = previous.get("price")
+        # =================================================
+        # PRICE DROP
+        # =================================================
 
-        drop_percent = calculate_price_drop(
-            old_price,
-            current_price
+        old_price = previous.get(
+            "price"
+        )
+
+        drop_percent = (
+            calculate_price_drop(
+                old_price,
+                current_price
+            )
         )
 
         if (
             drop_percent
             >= PRICE_DROP_THRESHOLD
         ):
+            alerts.append({
+                "type": "price_drop",
+                "item": item,
+                "old_price": old_price,
+                "new_price": current_price,
+                "drop_percent": drop_percent,
+            })
+
+        # Update stored information
+        state[item_id] = {
+            "name": item.get("name"),
+            "price": current_price,
+        }
+
+    # =====================================================
+    # ONE THUMBNAIL REQUEST
+    # =====================================================
+
+    alert_ids = [
+        alert["item"]["id"]
+        for alert in alerts
+    ]
+
+    thumbnails = get_thumbnails(
+        alert_ids
+    )
+
+    # =====================================================
+    # SEND ALERTS
+    # =====================================================
+
+    alerts_sent = 0
+
+    for alert in alerts:
+        item = alert["item"]
+
+        item_id = str(
+            item["id"]
+        )
+
+        thumbnail = thumbnails.get(
+            item_id
+        )
+
+        if alert["type"] == "free":
 
             print(
-                f"📉 Price drop detected: "
+                "🆓 New free Roblox item: "
+                f"{item.get('name')}"
+            )
+
+            embed = make_standard_embed(
+                "NEW FREE ROBLOX ITEM",
+                item,
+                "🆓",
+                thumbnail,
+            )
+
+        elif alert["type"] == "collectible":
+
+            print(
+                "💎 New Roblox collectible: "
+                f"{item.get('name')}"
+            )
+
+            embed = make_standard_embed(
+                "NEW ROBLOX COLLECTIBLE / LIMITED",
+                item,
+                "💎",
+                thumbnail,
+            )
+
+        else:
+            old_price = alert[
+                "old_price"
+            ]
+
+            new_price = alert[
+                "new_price"
+            ]
+
+            drop_percent = alert[
+                "drop_percent"
+            ]
+
+            print(
+                "📉 Roblox price drop: "
                 f"{item.get('name')} "
                 f"{old_price} -> "
-                f"{current_price} "
+                f"{new_price} "
                 f"({drop_percent:.1f}%)"
             )
 
-            send_price_drop_alert(
+            embed = make_standard_embed(
+                "ROBLOX ITEM PRICE DROP",
                 item,
-                old_price,
-                current_price,
-                drop_percent
+                "📉",
+                thumbnail,
+                extra_fields=[
+                    {
+                        "name": "⬅️ Old Price",
+                        "value": (
+                            f"{old_price:,} Robux"
+                        ),
+                        "inline": True,
+                    },
+                    {
+                        "name": "➡️ New Price",
+                        "value": (
+                            f"{new_price:,} Robux"
+                        ),
+                        "inline": True,
+                    },
+                    {
+                        "name": "📉 Drop",
+                        "value": (
+                            f"{drop_percent:.1f}%"
+                        ),
+                        "inline": True,
+                    },
+                ],
             )
 
+        if send_discord_embed(
+            embed
+        ):
             alerts_sent += 1
 
-        # Always update the stored price
-        # so future drops use the latest price.
-        state[item_id] = {
-            "price": current_price,
-            "name": item.get("name"),
-        }
+    # =====================================================
+    # SAVE
+    # =====================================================
 
     save_state(state)
 
     print(
-        f"✅ Scan finished — "
-        f"{roblox_items_found} Roblox items found, "
-        f"{len(state)} Roblox items tracked, "
-        f"{alerts_sent} new alerts."
+        "✅ Scan completed."
+    )
+
+    print(
+        f"📦 Tracking {len(state)} "
+        "official Roblox items."
+    )
+
+    print(
+        f"🔔 Alerts sent: "
+        f"{alerts_sent}"
     )
 
 
