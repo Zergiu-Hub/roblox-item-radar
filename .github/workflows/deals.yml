@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: roblox-radar-state-main
+  cancel-in-progress: false
+
 jobs:
   deals:
     runs-on: ubuntu-latest
@@ -16,6 +20,8 @@ jobs:
     steps:
       - name: Get repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -44,7 +50,10 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No deal state changes."
-          else
-            git commit -m "Update limited deal radar state"
-            git push
+            exit 0
           fi
+
+          git commit -m "Update limited deal radar state"
+
+          git pull --rebase origin main
+          git push origin main
