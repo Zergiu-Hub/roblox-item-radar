@@ -17,10 +17,11 @@ THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/assets"
 
 STATE_FILE = Path("seen_items.json")
 
+# Alert when a Roblox collectible/limited drops 10% or more
 PRICE_DROP_THRESHOLD = 10.0
 
 HEADERS = {
-    "User-Agent": "Roblox-Item-Radar/4.0"
+    "User-Agent": "Roblox-Item-Radar/5.0"
 }
 
 
@@ -37,11 +38,11 @@ def load_state():
             STATE_FILE.read_text(encoding="utf-8")
         )
 
-        # New state format
+        # Current state format
         if isinstance(data, dict):
             return data
 
-        # Automatically convert old list format
+        # Automatically convert the older list format
         if isinstance(data, list):
             return {
                 str(item_id): {
@@ -81,19 +82,14 @@ def roblox_get(url, params=None):
             timeout=20,
         )
 
-        # Roblox rate limit
         if response.status_code == 429:
             retry_after = response.headers.get(
                 "Retry-After",
                 "unknown"
             )
 
-            print(
-                "⚠️ Roblox rate limit reached."
-            )
-            print(
-                f"Retry-After: {retry_after}"
-            )
+            print("⚠️ Roblox rate limit reached.")
+            print(f"Retry-After: {retry_after}")
 
             return None
 
@@ -102,25 +98,16 @@ def roblox_get(url, params=None):
         return response
 
     except requests.RequestException as error:
-        print(
-            f"⚠️ Roblox request failed: {error}"
-        )
-
+        print(f"⚠️ Roblox request failed: {error}")
         return None
 
 
 # =========================================================
-# CATALOG
+# ROBLOX CATALOG
 # =========================================================
 
 def get_catalog_items():
-    """
-    Roblox creator ID 1 = official Roblox account.
-
-    This means Roblox filters the results for us,
-    instead of us downloading lots of UGC first.
-    """
-
+    # Roblox creator ID 1 = official Roblox account
     params = {
         "Category": 1,
         "CreatorTargetId": 1,
@@ -144,15 +131,10 @@ def get_catalog_items():
 
 
 # =========================================================
-# ITEM CHECKS
+# ITEM FILTERS
 # =========================================================
 
 def is_official_roblox(item):
-    """
-    Extra check even though the API query already
-    requests Roblox creator ID 1.
-    """
-
     creator_name = str(
         item.get("creatorName", "")
     ).strip().lower()
@@ -177,10 +159,11 @@ def is_collectible(item):
     )
 
 
-def calculate_price_drop(
-    old_price,
-    new_price
-):
+# =========================================================
+# PRICE DROP
+# =========================================================
+
+def calculate_price_drop(old_price, new_price):
     if old_price is None:
         return 0.0
 
@@ -204,10 +187,6 @@ def calculate_price_drop(
 # =========================================================
 
 def get_thumbnails(item_ids):
-    """
-    Ask Roblox for multiple thumbnails in ONE request.
-    """
-
     if not item_ids:
         return {}
 
@@ -216,7 +195,8 @@ def get_thumbnails(item_ids):
             THUMBNAIL_URL,
             params={
                 "assetIds": ",".join(
-                    str(x) for x in item_ids
+                    str(item_id)
+                    for item_id in item_ids
                 ),
                 "size": "420x420",
                 "format": "Png",
@@ -228,11 +208,9 @@ def get_thumbnails(item_ids):
 
         if response.status_code == 429:
             print(
-                "⚠️ Thumbnail rate limit reached."
+                "⚠️ Thumbnail rate limit reached. "
+                "Continuing without thumbnails."
             )
-
-            # Thumbnail is optional.
-            # Continue without images.
             return {}
 
         response.raise_for_status()
@@ -252,9 +230,7 @@ def get_thumbnails(item_ids):
             )
 
             if image_url:
-                thumbnails[target_id] = (
-                    image_url
-                )
+                thumbnails[target_id] = image_url
 
         return thumbnails
 
@@ -280,17 +256,15 @@ def send_discord_embed(embed):
             timeout=20,
         )
 
-        # Discord can rate limit too
         if response.status_code == 429:
             print(
                 "⚠️ Discord rate limit reached."
             )
-
             return False
 
         response.raise_for_status()
 
-        # Tiny delay between Discord alerts
+        # Small delay if several alerts happen together
         time.sleep(1)
 
         return True
@@ -299,11 +273,10 @@ def send_discord_embed(embed):
         print(
             f"⚠️ Discord error: {error}"
         )
-
         return False
 
 
-def make_standard_embed(
+def make_embed(
     title,
     item,
     emoji,
@@ -328,27 +301,20 @@ def make_standard_embed(
         price_text = "Not listed"
 
     else:
-        price_text = (
-            f"{price:,} Robux"
-        )
+        price_text = f"{price:,} Robux"
 
     remaining = item.get(
         "unitsAvailableForConsumption"
     )
 
     if remaining is None:
-        remaining_text = (
-            "Not provided"
-        )
+        remaining_text = "Not provided"
 
     else:
-        remaining_text = (
-            f"{remaining:,}"
-        )
+        remaining_text = f"{remaining:,}"
 
     item_url = (
-        "https://www.roblox.com/"
-        f"catalog/{item_id}"
+        f"https://www.roblox.com/catalog/{item_id}"
     )
 
     fields = [
@@ -374,9 +340,7 @@ def make_standard_embed(
         },
         {
             "name": "🔗 Roblox",
-            "value": (
-                f"[View Item]({item_url})"
-            ),
+            "value": f"[View Item]({item_url})",
             "inline": True,
         },
     ]
@@ -406,30 +370,25 @@ def make_standard_embed(
 
 
 # =========================================================
-# MAIN
+# MAIN RADAR
 # =========================================================
 
 def main():
-    print(
-        "🛰️ Roblox Item Radar starting..."
-    )
+    print("🛰️ Roblox Item Radar starting...")
 
     state = load_state()
 
     items = get_catalog_items()
 
-    # IMPORTANT:
-    # If Roblox rate-limits the catalog request,
-    # exit safely instead of crashing.
+    # If Roblox temporarily rate limits us,
+    # finish safely and try again next scheduled run.
     if items is None:
         print(
-            "⚠️ Roblox could not be checked "
-            "this run."
+            "⚠️ Roblox could not be checked this run."
         )
 
         print(
-            "GitHub will try again "
-            "on the next scheduled run."
+            "The radar will try again next time."
         )
 
         return
@@ -440,10 +399,7 @@ def main():
     )
 
     if not items:
-        print(
-            "No Roblox items returned."
-        )
-
+        print("No Roblox items returned.")
         return
 
     first_run = len(state) == 0
@@ -451,6 +407,7 @@ def main():
     alerts = []
 
     for item in items:
+
         item_id = item.get("id")
 
         if item_id is None:
@@ -458,24 +415,20 @@ def main():
 
         item_id = str(item_id)
 
-        # Extra safety
+        # Only official Roblox-created items
         if not is_official_roblox(item):
             print(
-                f"Skipping non-Roblox item "
+                f"Skipping non-Roblox item: "
                 f"{item_id}"
             )
             continue
 
-        current_price = item.get(
-            "price"
-        )
+        current_price = item.get("price")
 
-        previous = state.get(
-            item_id
-        )
+        previous = state.get(item_id)
 
         # =================================================
-        # NEW ITEM
+        # NEW ROBLOX ITEM
         # =================================================
 
         if previous is None:
@@ -485,18 +438,22 @@ def main():
                 "price": current_price,
             }
 
-            # Don't spam old items when
-            # setting up the radar.
+            # Prevent old items from flooding Discord
+            # during initial setup.
             if first_run:
                 continue
 
+            # New FREE official Roblox item
             if is_free(item):
+
                 alerts.append({
                     "type": "free",
                     "item": item,
                 })
 
+            # New official Roblox collectible/limited
             elif is_collectible(item):
+
                 alerts.append({
                     "type": "collectible",
                     "item": item,
@@ -508,20 +465,19 @@ def main():
         # PRICE DROP
         # =================================================
 
-        old_price = previous.get(
-            "price"
+        old_price = previous.get("price")
+
+        drop_percent = calculate_price_drop(
+            old_price,
+            current_price
         )
 
-        drop_percent = (
-            calculate_price_drop(
-                old_price,
-                current_price
-            )
-        )
-
+        # IMPORTANT:
+        # Price-drop alerts are ONLY for
+        # Roblox collectibles / limiteds.
         if (
-            drop_percent
-            >= PRICE_DROP_THRESHOLD
+            is_collectible(item)
+            and drop_percent >= PRICE_DROP_THRESHOLD
         ):
             alerts.append({
                 "type": "price_drop",
@@ -531,14 +487,14 @@ def main():
                 "drop_percent": drop_percent,
             })
 
-        # Update stored information
+        # Always remember the latest price
         state[item_id] = {
             "name": item.get("name"),
             "price": current_price,
         }
 
     # =====================================================
-    # ONE THUMBNAIL REQUEST
+    # GET THUMBNAILS IN ONE REQUEST
     # =====================================================
 
     alert_ids = [
@@ -551,12 +507,13 @@ def main():
     )
 
     # =====================================================
-    # SEND ALERTS
+    # SEND DISCORD ALERTS
     # =====================================================
 
     alerts_sent = 0
 
     for alert in alerts:
+
         item = alert["item"]
 
         item_id = str(
@@ -567,6 +524,7 @@ def main():
             item_id
         )
 
+        # FREE ITEM
         if alert["type"] == "free":
 
             print(
@@ -574,13 +532,14 @@ def main():
                 f"{item.get('name')}"
             )
 
-            embed = make_standard_embed(
+            embed = make_embed(
                 "NEW FREE ROBLOX ITEM",
                 item,
                 "🆓",
                 thumbnail,
             )
 
+        # NEW COLLECTIBLE / LIMITED
         elif alert["type"] == "collectible":
 
             print(
@@ -588,14 +547,16 @@ def main():
                 f"{item.get('name')}"
             )
 
-            embed = make_standard_embed(
+            embed = make_embed(
                 "NEW ROBLOX COLLECTIBLE / LIMITED",
                 item,
                 "💎",
                 thumbnail,
             )
 
+        # 10%+ LIMITED / COLLECTIBLE PRICE DROP
         else:
+
             old_price = alert[
                 "old_price"
             ]
@@ -609,15 +570,15 @@ def main():
             ]
 
             print(
-                "📉 Roblox price drop: "
+                "📉 Roblox collectible price drop: "
                 f"{item.get('name')} "
                 f"{old_price} -> "
                 f"{new_price} "
                 f"({drop_percent:.1f}%)"
             )
 
-            embed = make_standard_embed(
-                "ROBLOX ITEM PRICE DROP",
+            embed = make_embed(
+                "ROBLOX LIMITED PRICE DROP",
                 item,
                 "📉",
                 thumbnail,
@@ -646,20 +607,16 @@ def main():
                 ],
             )
 
-        if send_discord_embed(
-            embed
-        ):
+        if send_discord_embed(embed):
             alerts_sent += 1
 
     # =====================================================
-    # SAVE
+    # SAVE STATE
     # =====================================================
 
     save_state(state)
 
-    print(
-        "✅ Scan completed."
-    )
+    print("✅ Scan completed.")
 
     print(
         f"📦 Tracking {len(state)} "
@@ -667,8 +624,7 @@ def main():
     )
 
     print(
-        f"🔔 Alerts sent: "
-        f"{alerts_sent}"
+        f"🔔 Alerts sent: {alerts_sent}"
     )
 
 
