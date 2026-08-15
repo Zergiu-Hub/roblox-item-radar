@@ -1,0 +1,45 @@
+name: Roblox Limited Deal Radar
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  deals:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: python -m pip install requests
+
+      - name: Run Limited Deal Radar
+        env:
+          DEALS_DISCORD_WEBHOOK: ${{ secrets.DEALS_DISCORD_WEBHOOK }}
+        run: python deals.py
+
+      - name: Save deal state
+        run: |
+          git config user.name "Roblox Limited Deal Radar"
+          git config user.email "actions@users.noreply.github.com"
+
+          git add deals_state.json
+
+          if git diff --cached --quiet; then
+            echo "No deal state changes."
+          else
+            git commit -m "Update limited deal radar state"
+            git push
+          fi
