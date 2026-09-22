@@ -7,6 +7,10 @@
     "name": "Red Planet",
     "price": 200
   },
+  "101724952386134": {
+    "name": "Opal King of the Night",
+    "price": 50000
+  },
   "103126651884029": {
     "name": "Supernova Face",
     "price": 30
@@ -57,6 +61,14 @@
   "114062766927484": {
     "name": "Lunar Companion",
     "price": 500
+  },
+  "114477450270848": {
+    "name": "The Rest of the Cake",
+    "price": 500
+  },
+  "115704335190242": {
+    "name": "Crown-fetti Cake",
+    "price": 4000
   },
   "116075102747404": {
     "price": null
