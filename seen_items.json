@@ -81,6 +81,10 @@
     "name": "Graffiti Wall",
     "price": 200
   },
+  "117367851700030": {
+    "name": "Emberwrath, Lord of the Burning Void",
+    "price": 50000
+  },
   "117866988082268": {
     "price": null
   },
@@ -264,6 +268,10 @@
   "88843808342589": {
     "price": null
   },
+  "89873435761021": {
+    "name": "Ghostlight Pumpkin Bucket",
+    "price": 500
+  },
   "90442480793411": {
     "price": null
   },
@@ -286,6 +294,10 @@
   "95681420685521": {
     "name": "Moonlight Meadow",
     "price": 200
+  },
+  "96386868741075": {
+    "name": "Bloodshot Ruby Eye",
+    "price": 5000
   },
   "98481185145328": {
     "price": null
