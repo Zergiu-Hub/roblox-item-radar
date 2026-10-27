@@ -58,6 +58,10 @@
     "name": "Activity Bag",
     "price": 140
   },
+  "113655181607111": {
+    "name": "Bloodsteel Bathelm",
+    "price": 50000
+  },
   "114062766927484": {
     "name": "Lunar Companion",
     "price": 500
@@ -104,6 +108,10 @@
   "119934643965525": {
     "name": "Starwisp",
     "price": 0
+  },
+  "120386566219436": {
+    "name": "The Ashen Reaper",
+    "price": 2500
   },
   "120390109534026": {
     "name": "Sovereign Peacock Cape",
@@ -268,6 +276,10 @@
   "87019331085561": {
     "name": "Midnight Carnival",
     "price": 200
+  },
+  "88641938334989": {
+    "name": "Scorched Riddling Skull",
+    "price": 10000
   },
   "88843808342589": {
     "price": null
