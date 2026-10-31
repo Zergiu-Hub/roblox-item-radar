@@ -11,6 +11,10 @@
     "name": "Opal King of the Night",
     "price": 50000
   },
+  "103071013278332": {
+    "name": "Scorched Witch Hat",
+    "price": 500
+  },
   "103126651884029": {
     "name": "Supernova Face",
     "price": 30
@@ -34,6 +38,10 @@
   },
   "107819297423853": {
     "price": null
+  },
+  "107946839243820": {
+    "name": "Sinister W.",
+    "price": 7000
   },
   "108920301601866": {
     "name": "Supernova Eyes",
@@ -306,6 +314,10 @@
   "93762663362787": {
     "name": "Shedletsekkar",
     "price": 2000000
+  },
+  "95607843117050": {
+    "name": "Scorched Antlers",
+    "price": 25000
   },
   "95681420685521": {
     "name": "Moonlight Meadow",
