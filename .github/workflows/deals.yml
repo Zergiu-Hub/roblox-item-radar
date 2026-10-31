@@ -37,16 +37,14 @@ jobs:
         run: python deals.py
 
       - name: Save deal state
+        if: ${{ always() }}
         run: |
           git config user.name "Roblox Limited Deal Radar"
           git config user.email "actions@users.noreply.github.com"
 
-          if [ ! -f deals_state.json ]; then
-            echo "No deals_state.json created this run."
-            exit 0
-          fi
-
-          git add deals_state.json
+          for file in deals_state.json pending_deals.json; do
+            if [ -f "$file" ]; then git add "$file"; fi
+          done
 
           if git diff --cached --quiet; then
             echo "No deal state changes."

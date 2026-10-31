@@ -37,16 +37,14 @@ jobs:
         run: python monitor.py
 
       - name: Save radar state
+        if: ${{ always() }}
         run: |
           git config user.name "Roblox Item Radar"
           git config user.email "actions@users.noreply.github.com"
 
-          if [ ! -f seen_items.json ]; then
-            echo "No seen_items.json created this run."
-            exit 0
-          fi
-
-          git add seen_items.json
+          for file in seen_items.json pending_items.json; do
+            if [ -f "$file" ]; then git add "$file"; fi
+          done
 
           if git diff --cached --quiet; then
             echo "No radar state changes."

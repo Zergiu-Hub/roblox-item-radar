@@ -5,6 +5,8 @@ from pathlib import Path
 
 import requests
 
+from alert_delivery import AlertDelivery
+
 
 # =========================================================
 # CONFIG
@@ -270,33 +272,7 @@ def send_deal_alert(
             "url": thumbnail
         }
 
-    try:
-        response = requests.post(
-            WEBHOOK,
-            json={
-                "embeds": [embed]
-            },
-            timeout=20,
-        )
-
-        if response.status_code == 429:
-            print("⚠️ Discord rate limit reached.")
-            return False
-
-        response.raise_for_status()
-
-        time.sleep(1)
-
-        print(
-            f"🔥 Discord alert sent: "
-            f"{name} ({drop_percent:.1f}%)"
-        )
-
-        return True
-
-    except requests.RequestException as error:
-        print(f"❌ Discord error: {error}")
-        return False
+    return delivery.send(embed)
 
 
 # =========================================================
@@ -308,6 +284,9 @@ def main():
     # -----------------------------------------------------
     # TEST MODE
     # -----------------------------------------------------
+
+    global delivery
+    delivery = AlertDelivery(WEBHOOK, "pending_deals.json")
 
     if TEST_MODE:
         print("🧪 TEST MODE ENABLED")
@@ -332,6 +311,7 @@ def main():
         else:
             print("❌ TEST FAILED.")
 
+        delivery.check()
         return
 
 
@@ -345,15 +325,14 @@ def main():
         f"{DEAL_THRESHOLD:.0f}%"
     )
 
+    delivery.retry()
+
     state = load_state()
 
     items = get_collectibles()
 
     if items is None:
-        print(
-            "⚠️ Roblox could not be checked."
-        )
-        return
+        raise RuntimeError("Roblox catalog check failed")
 
     print(
         f"📦 Roblox returned "
@@ -362,6 +341,7 @@ def main():
 
     if not items:
         print("No collectibles returned.")
+        delivery.check()
         return
 
     first_run = len(state) == 0
@@ -479,6 +459,7 @@ def main():
     # =====================================================
 
     save_state(state)
+    delivery.check()
 
     print("")
     print("==============================")

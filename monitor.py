@@ -5,6 +5,8 @@ from pathlib import Path
 
 import requests
 
+from alert_delivery import AlertDelivery
+
 
 # =========================================================
 # CONFIG
@@ -247,33 +249,7 @@ def get_thumbnails(item_ids):
 # =========================================================
 
 def send_discord_embed(embed):
-    try:
-        response = requests.post(
-            WEBHOOK,
-            json={
-                "embeds": [embed]
-            },
-            timeout=20,
-        )
-
-        if response.status_code == 429:
-            print(
-                "⚠️ Discord rate limit reached."
-            )
-            return False
-
-        response.raise_for_status()
-
-        # Small delay if several alerts happen together
-        time.sleep(1)
-
-        return True
-
-    except requests.RequestException as error:
-        print(
-            f"⚠️ Discord error: {error}"
-        )
-        return False
+    return delivery.send(embed)
 
 
 def make_embed(
@@ -376,22 +352,17 @@ def make_embed(
 def main():
     print("🛰️ Roblox Item Radar starting...")
 
+    global delivery
+    delivery = AlertDelivery(WEBHOOK, "pending_items.json")
+    delivery.retry()
+
     state = load_state()
 
     items = get_catalog_items()
 
-    # If Roblox temporarily rate limits us,
-    # finish safely and try again next scheduled run.
+    # A skipped scan must not appear successful in Actions.
     if items is None:
-        print(
-            "⚠️ Roblox could not be checked this run."
-        )
-
-        print(
-            "The radar will try again next time."
-        )
-
-        return
+        raise RuntimeError("Roblox catalog check failed")
 
     print(
         f"Marketplace returned "
@@ -400,6 +371,7 @@ def main():
 
     if not items:
         print("No Roblox items returned.")
+        delivery.check()
         return
 
     first_run = len(state) == 0
@@ -615,6 +587,7 @@ def main():
     # =====================================================
 
     save_state(state)
+    delivery.check()
 
     print("✅ Scan completed.")
 
